@@ -12,7 +12,7 @@ def student():
     remarks = "Pass" if grade >= 75 else "Fail"
 
     return jsonify({
-        "name": "Angel Grace Lastua",
+        "name": "Annie Franco",
         "grade": grade,
         "section": "BSIT",
         "remarks": remarks
