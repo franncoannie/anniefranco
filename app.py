@@ -1,10 +1,10 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Welcome to my Flask API"
+    return render_template("index.html")
 
 @app.route('/student')
 def student():
@@ -17,6 +17,13 @@ def student():
         "section": "BSIT",
         "remarks": remarks
     })
+
+@app.route('/result')
+def result():
+    grade = int(request.args.get('grade', 0))
+    remarks = "Pass" if grade >= 75 else "Fail"
+
+    return render_template("result.html", grade=grade, remarks=remarks)
 
 if __name__ == '__main__':
     app.run(debug=True)
