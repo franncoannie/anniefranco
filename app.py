@@ -1,328 +1,237 @@
-from flask import Flask, jsonify, request, render_template_string, redirect, url_for
+from flask import Flask, request, redirect, url_for, render_template_string
+import sqlite3
+import os
 
-app = Flask(__name__)
+app = Flask(_name_)
 
-students = [
-    {"id": 1, "name": "Juan", "grade": 85, "section": "Zechariah"},
-    {"id": 2, "name": "Maria", "grade": 90, "section": "Zechariah"},
-    {"id": 3, "name": "Pedro", "grade": 70, "section": "Zion"}
-]
+DB_NAME = os.path.join(os.getcwd(), "students.db")
+PASS_MARK = 75
 
-# ===============================
-# HOME
-# ===============================
+# ----------------------
+# CSS
+# ----------------------
+BASE_CSS = """
+<style>
+:root {
+    --primary: #4a90e2;
+    --secondary: #f39c12;
+    --danger: #e74c3c;
+    --success: #2ecc71;
+    --dark: #2c3e50;
+    --light: #f4f7f6;
+}
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background-color: var(--light);
+    margin:0; padding:20px;
+}
+.container {
+    max-width:900px;
+    margin:auto;
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,0.1);
+}
+.summary-grid {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:15px;
+    margin-bottom:30px;
+}
+.card {
+    padding:15px;
+    border-radius:8px;
+    text-align:center;
+    color:white;
+    font-weight:bold;
+}
+.bg-avg { background: var(--primary); }
+.bg-pass { background: var(--success); }
+.bg-fail { background: var(--danger); }
+
+table {
+    width:100%;
+    border-collapse:collapse;
+}
+th, td {
+    padding:12px;
+    border-bottom:1px solid #eee;
+}
+.badge { padding:4px 8px; border-radius:4px; color:white; }
+.pass { background: var(--success); }
+.fail { background: var(--danger); }
+
+.btn { padding:8px 16px; border:none; cursor:pointer; }
+.btn-add { background: var(--primary); color:white; }
+</style>
+"""
+
+# ----------------------
+# DATABASE
+# ----------------------
+def get_db_connection():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            grade INTEGER,
+            section TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def compute_summary():
+    conn = get_db_connection()
+    grades = [row["grade"] for row in conn.execute("SELECT grade FROM students").fetchall()]
+    conn.close()
+
+    if not grades:
+        return {"average": 0, "passed": 0, "failed": 0}
+
+    avg = round(sum(grades) / len(grades), 2)
+    passed = len([g for g in grades if g >= PASS_MARK])
+
+    return {"average": avg, "passed": passed, "failed": len(grades) - passed}
+
+# ----------------------
+# ROUTES
+# ----------------------
+
+# ✅ FIX: HOME ROUTE
 @app.route('/')
 def home():
     return redirect(url_for('list_students'))
 
-# ===============================
-# MAIN DASHBOARD
-# ===============================
 @app.route('/students')
 def list_students():
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Student Dashboard</title>
-        <style>
-            body {
-                margin: 0;
-                font-family: 'Segoe UI', sans-serif;
-                background: linear-gradient(135deg, #0f172a, #020617);
-                color: #e2e8f0;
-            }
+    conn = get_db_connection()
+    students = conn.execute("SELECT * FROM students").fetchall()
+    conn.close()
 
-            .container {
-                max-width: 1100px;
-                margin: 50px auto;
-                padding: 20px;
-            }
+    summary = compute_summary()
 
-            h1 {
-                text-align: center;
-                margin-bottom: 25px;
-                font-weight: 600;
-                letter-spacing: 1px;
-                background: linear-gradient(90deg, #38bdf8, #818cf8);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
+    html = BASE_CSS + """
+    <div class="container">
+        <h2>🎓 Student Management System</h2>
 
-            .card {
-                background: rgba(30, 41, 59, 0.6);
-                backdrop-filter: blur(12px);
-                border-radius: 16px;
-                padding: 25px;
-                border: 1px solid rgba(255,255,255,0.08);
-                box-shadow: 0 10px 40px rgba(0,0,0,0.7);
-            }
-
-            .top-bar {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 20px;
-            }
-
-            .btn {
-                padding: 8px 16px;
-                border-radius: 999px;
-                text-decoration: none;
-                font-size: 13px;
-                font-weight: 500;
-                transition: all 0.25s ease;
-                display: inline-block;
-            }
-
-            .add {
-                background: linear-gradient(135deg, #22c55e, #16a34a);
-                color: white;
-            }
-
-            .edit {
-                background: linear-gradient(135deg, #3b82f6, #2563eb);
-                color: white;
-            }
-
-            .delete {
-                background: linear-gradient(135deg, #ef4444, #dc2626);
-                color: white;
-            }
-
-            .btn:hover {
-                transform: translateY(-2px) scale(1.05);
-                box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            }
-
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                border-radius: 12px;
-                overflow: hidden;
-            }
-
-            th {
-                background: rgba(51, 65, 85, 0.7);
-                font-weight: 600;
-            }
-
-            th, td {
-                padding: 14px;
-                text-align: center;
-            }
-
-            tr {
-                transition: 0.2s;
-            }
-
-            tr:nth-child(even) {
-                background: rgba(15, 23, 42, 0.6);
-            }
-
-            tr:nth-child(odd) {
-                background: rgba(2, 6, 23, 0.6);
-            }
-
-            tr:hover {
-                background: rgba(56, 189, 248, 0.15);
-                transform: scale(1.01);
-            }
-
-            .grade {
-                font-weight: bold;
-                padding: 6px 12px;
-                border-radius: 999px;
-                display: inline-block;
-            }
-
-            .high {
-                background: rgba(34,197,94,0.15);
-                color: #22c55e;
-            }
-
-            .mid {
-                background: rgba(250,204,21,0.15);
-                color: #facc15;
-            }
-
-            .low {
-                background: rgba(239,68,68,0.15);
-                color: #ef4444;
-            }
-        </style>
-    </head>
-
-    <body>
-        <div class="container">
-            <h1>🎓 Student Dashboard</h1>
-
-            <div class="card">
-                <div class="top-bar">
-                    <div></div>
-                    <a class="btn add" href="/add_student_form">➕ Add Student</a>
-                </div>
-
-                <table>
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Grade</th>
-                        <th>Section</th>
-                        <th>Actions</th>
-                    </tr>
-
-                    {% for s in students %}
-                    <tr>
-                        <td>{{s.id}}</td>
-                        <td>{{s.name}}</td>
-                        <td>
-                            <span class="grade
-                                {% if s.grade >= 85 %}high
-                                {% elif s.grade >= 75 %}mid
-                                {% else %}low
-                                {% endif %}">
-                                {{s.grade}}
-                            </span>
-                        </td>
-                        <td>{{s.section}}</td>
-                        <td>
-                            <a class="btn edit" href="/edit_student/{{s.id}}">Edit</a>
-                            <a class="btn delete" href="/delete_student/{{s.id}}" onclick="return confirm('Delete?')">Delete</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
+        <div class="summary-grid">
+            <div class="card bg-avg">Avg: {{summary.average}}</div>
+            <div class="card bg-pass">Passed: {{summary.passed}}</div>
+            <div class="card bg-fail">Failed: {{summary.failed}}</div>
         </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html, students=students)
 
-# ===============================
-# FORM TEMPLATE (REUSABLE STYLE)
-# ===============================
-form_style = """
-<style>
-    body {
-        background: linear-gradient(135deg, #0f172a, #020617);
-        font-family: 'Segoe UI', sans-serif;
-        color: white;
-        text-align: center;
-        padding-top: 80px;
-    }
+        <a href="/add_student_form" class="btn btn-add">+ Add Student</a>
 
-    .box {
-        background: rgba(30,41,59,0.6);
-        backdrop-filter: blur(10px);
-        padding: 30px;
-        border-radius: 16px;
-        width: 300px;
-        margin: auto;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-    }
-
-    input {
-        width: 90%;
-        padding: 10px;
-        margin: 8px 0;
-        border-radius: 8px;
-        border: none;
-        outline: none;
-    }
-
-    button {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #38bdf8, #6366f1);
-        color: white;
-        cursor: pointer;
-    }
-
-    a {
-        color: #38bdf8;
-        display: inline-block;
-        margin-top: 10px;
-    }
-</style>
-"""
-
-# ===============================
-# ADD STUDENT
-# ===============================
-@app.route('/add_student_form')
-def add_student_form():
-    return form_style + """
-    <div class="box">
-        <h2>Add Student</h2>
-        <form method='POST' action='/add_student'>
-            <input name='name' placeholder='Name' required>
-            <input type='number' name='grade' placeholder='Grade' required>
-            <input name='section' placeholder='Section' required>
-            <br><br>
-            <button>Add</button>
-        </form>
-        <a href='/students'>Back</a>
+        <table>
+        <tr><th>ID</th><th>Name</th><th>Section</th><th>Grade</th><th>Status</th><th>Actions</th></tr>
+        {% for s in students %}
+        <tr>
+            <td>{{s.id}}</td>
+            <td>{{s.name}}</td>
+            <td>{{s.section}}</td>
+            <td>{{s.grade}}</td>
+            <td>
+                {% if s.grade >= 75 %}
+                <span class="badge pass">PASSED</span>
+                {% else %}
+                <span class="badge fail">FAILED</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="/edit_student/{{s.id}}">Edit</a> |
+                <a href="/delete_student/{{s.id}}">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+        </table>
     </div>
     """
+    return render_template_string(html, students=students, summary=summary)
+
+@app.route('/add_student_form')
+def add_student_form():
+    html = BASE_CSS + """
+    <div class="container">
+        <h2>Add Student</h2>
+        <form method="POST" action="/add_student">
+            <input type="text" name="name" placeholder="Name" required>
+            <input type="number" name="grade" placeholder="Grade" required>
+            <input type="text" name="section" placeholder="Section" required>
+            <button class="btn btn-add">Save</button>
+        </form>
+    </div>
+    """
+    return render_template_string(html)
 
 @app.route('/add_student', methods=['POST'])
 def add_student():
-    students.append({
-        "id": max([s["id"] for s in students]) + 1 if students else 1,
-        "name": request.form.get("name"),
-        "grade": int(request.form.get("grade")),
-        "section": request.form.get("section")
-    })
+    name = request.form.get("name")
+    grade = int(request.form.get("grade") or 0)
+    section = request.form.get("section")
+
+    conn = get_db_connection()
+    conn.execute("INSERT INTO students (name, grade, section) VALUES (?, ?, ?)",
+                 (name, grade, section))
+    conn.commit()
+    conn.close()
+
     return redirect(url_for('list_students'))
 
-# ===============================
-# DELETE
-# ===============================
-@app.route('/delete_student/<int:id>')
-def delete_student(id):
-    global students
-    students = [s for s in students if s["id"] != id]
-    return redirect(url_for('list_students'))
-
-# ===============================
-# EDIT
-# ===============================
-@app.route('/edit_student/<int:id>', methods=['GET', 'POST'])
+@app.route('/edit_student/<int:id>', methods=['GET','POST'])
 def edit_student(id):
-    student = next((s for s in students if s["id"] == id), None)
+    conn = get_db_connection()
+    student = conn.execute("SELECT * FROM students WHERE id=?", (id,)).fetchone()
+
+    if not student:
+        conn.close()
+        return "Not found", 404
 
     if request.method == 'POST':
-        student["name"] = request.form["name"]
-        student["grade"] = int(request.form["grade"])
-        student["section"] = request.form["section"]
+        name = request.form.get("name")
+        grade = int(request.form.get("grade") or 0)
+        section = request.form.get("section")
+
+        conn.execute("UPDATE students SET name=?, grade=?, section=? WHERE id=?",
+                     (name, grade, section, id))
+        conn.commit()
+        conn.close()
         return redirect(url_for('list_students'))
 
-    return render_template_string(form_style + """
-    <div class="box">
+    conn.close()
+
+    html = BASE_CSS + """
+    <div class="container">
         <h2>Edit Student</h2>
-        <form method='POST'>
-            <input name='name' value='{{student.name}}'>
-            <input type='number' name='grade' value='{{student.grade}}'>
-            <input name='section' value='{{student.section}}'>
-            <br><br>
-            <button>Update</button>
+        <form method="POST">
+            <input type="text" name="name" value="{{student.name}}" required>
+            <input type="number" name="grade" value="{{student.grade}}" required>
+            <input type="text" name="section" value="{{student.section}}" required>
+            <button class="btn btn-add">Update</button>
         </form>
-        <a href='/students'>Back</a>
     </div>
-    """, student=student)
+    """
+    return render_template_string(html, student=student)
 
-# ===============================
-# API
-# ===============================
-@app.route('/api/students')
-def api_students():
-    return jsonify(students)
+@app.route('/delete_student/<int:id>')
+def delete_student(id):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM students WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('list_students'))
 
-# ===============================
+# ----------------------
 # RUN
-# ===============================
-if __name__ == '__main__':
-    
-    app.run(debug=True)
+# ----------------------
+init_db()
+
+if _name_ == '_main_':
+    app.run(host='0.0.0.0', port=10000)
