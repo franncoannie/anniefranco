@@ -2,7 +2,8 @@ from flask import Flask, request, redirect, url_for, render_template_string
 import sqlite3
 import os
 
-app = Flask(_name_)
+# ✅ FIXED
+app = Flask(__name__)
 
 DB_NAME = os.path.join(os.getcwd(), "students.db")
 PASS_MARK = 75
@@ -105,7 +106,6 @@ def compute_summary():
 # ROUTES
 # ----------------------
 
-# ✅ FIX: HOME ROUTE
 @app.route('/')
 def home():
     return redirect(url_for('list_students'))
@@ -162,9 +162,9 @@ def add_student_form():
     <div class="container">
         <h2>Add Student</h2>
         <form method="POST" action="/add_student">
-            <input type="text" name="name" placeholder="Name" required>
-            <input type="number" name="grade" placeholder="Grade" required>
-            <input type="text" name="section" placeholder="Section" required>
+            <input type="text" name="name" placeholder="Name" required><br><br>
+            <input type="number" name="grade" placeholder="Grade" required><br><br>
+            <input type="text" name="section" placeholder="Section" required><br><br>
             <button class="btn btn-add">Save</button>
         </form>
     </div>
@@ -178,14 +178,16 @@ def add_student():
     section = request.form.get("section")
 
     conn = get_db_connection()
-    conn.execute("INSERT INTO students (name, grade, section) VALUES (?, ?, ?)",
-                 (name, grade, section))
+    conn.execute(
+        "INSERT INTO students (name, grade, section) VALUES (?, ?, ?)",
+        (name, grade, section)
+    )
     conn.commit()
     conn.close()
 
     return redirect(url_for('list_students'))
 
-@app.route('/edit_student/<int:id>', methods=['GET','POST'])
+@app.route('/edit_student/<int:id>', methods=['GET', 'POST'])
 def edit_student(id):
     conn = get_db_connection()
     student = conn.execute("SELECT * FROM students WHERE id=?", (id,)).fetchone()
@@ -199,8 +201,10 @@ def edit_student(id):
         grade = int(request.form.get("grade") or 0)
         section = request.form.get("section")
 
-        conn.execute("UPDATE students SET name=?, grade=?, section=? WHERE id=?",
-                     (name, grade, section, id))
+        conn.execute(
+            "UPDATE students SET name=?, grade=?, section=? WHERE id=?",
+            (name, grade, section, id)
+        )
         conn.commit()
         conn.close()
         return redirect(url_for('list_students'))
@@ -211,9 +215,9 @@ def edit_student(id):
     <div class="container">
         <h2>Edit Student</h2>
         <form method="POST">
-            <input type="text" name="name" value="{{student.name}}" required>
-            <input type="number" name="grade" value="{{student.grade}}" required>
-            <input type="text" name="section" value="{{student.section}}" required>
+            <input type="text" name="name" value="{{student.name}}" required><br><br>
+            <input type="number" name="grade" value="{{student.grade}}" required><br><br>
+            <input type="text" name="section" value="{{student.section}}" required><br><br>
             <button class="btn btn-add">Update</button>
         </form>
     </div>
@@ -229,9 +233,10 @@ def delete_student(id):
     return redirect(url_for('list_students'))
 
 # ----------------------
-# RUN
+# START APP
 # ----------------------
 init_db()
 
-if _name_ == '_main_':
+# ✅ FIXED
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
